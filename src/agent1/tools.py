@@ -10,6 +10,9 @@ MAX_CHARS = 8000  # cap what we hand back to the model, so cost stays bounded
 
 def search_pubmed(query: str, max_results: int = 5) -> str:
     """Search PubMed and return the abstracts of the top matches as plain text."""
+
+    max_results = max(1, min(max_results, 10))  # cap max resutls to limit token cost later
+
     with httpx.Client(timeout=TIMEOUT) as client:
         found = client.get(
             f"{EUTILS}/esearch.fcgi",

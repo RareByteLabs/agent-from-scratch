@@ -22,5 +22,5 @@ def load_settings() -> Settings:
         )
     return Settings(
         api_key=api_key,
-        model=os.environ.get("AGENT1_MODEL", "claude-haiku-4-5-20251001"),
+        model=os.environ.get("AGENT1_MODEL", "claude-haiku-5-5"),
     )

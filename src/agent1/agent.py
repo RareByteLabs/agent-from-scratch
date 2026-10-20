@@ -6,11 +6,14 @@ from anthropic.types import MessageParam, ToolParam, ToolResultBlockParam
 
 from agent1.config import Settings
 from agent1.llm import complete
+from agent1.pricing import cost_usd
 from agent1.tools import SEARCH_PUBMED_SCHEMA, search_pubmed
 
 log = logging.getLogger(__name__)
 
 MAX_STEPS = 6  # hard stop so a confused agent can never loop (or spend) forever
+
+MAX_PROMPT_TOKENS = 60_000  # stay well below the 100K price threshold
 
 SYSTEM_PROMPT = (
     "You are an evidence-lookup assistant for clinicians and health researchers. "
@@ -35,6 +38,12 @@ def run_tool(name: str, args: dict) -> str:
         return f"Error: {exc}"
 
 
+def usage_summary(model: str, tokens_in: int, tokens_out: int) -> str:
+    cost = cost_usd(model, tokens_in, tokens_out)
+    cost_text = f"${cost:.4f}" if cost is not None else "unknown (no price on file)"
+    return f"\n\n\nModel={model} tokens in={tokens_in} out={tokens_out} cost={cost_text}\n\n\n"
+
+
 def run_agent(settings: Settings, question: str) -> str:
     messages: list[MessageParam] = [{"role": "user", "content": question}]
     total_in = total_out = 0
@@ -46,7 +55,7 @@ def run_agent(settings: Settings, question: str) -> str:
         log.info("step %d: stop_reason=%s", step, response.stop_reason)
 
         if response.stop_reason != "tool_use":
-            log.info("tokens total: in=%d out=%d", total_in, total_out)
+            log.info("usage: %s", usage_summary(settings.model, total_in, total_out))
             return "".join(b.text for b in response.content if b.type == "text")
 
         messages.append({"role": "assistant", "content": response.content})
@@ -63,4 +72,11 @@ def run_agent(settings: Settings, question: str) -> str:
                 )
         messages.append({"role": "user", "content": results})
 
+        if response.usage.input_tokens > MAX_PROMPT_TOKENS:
+            # Guardrail: stop if the prompt is too big, to avoid runaway costs
+            log.warning("prompt size %d is over budget, stopping", response.usage.input_tokens)
+            log.info("usage: %s", usage_summary(settings.model, total_in, total_out))
+            return "Stopped: prompt budget exceeded."
+
+    log.info("usage: %s", usage_summary(settings.model, total_in, total_out))
     return "Stopped: step limit reached without a final answer."
