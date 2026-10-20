@@ -6,10 +6,10 @@ from dataclasses import dataclass
 
 from anthropic.types import MessageParam, ToolParam, ToolResultBlockParam
 
-from agent1.config import Settings
-from agent1.llm import complete
-from agent1.pricing import cost_usd
-from agent1.tools import SEARCH_PUBMED_SCHEMA, extract_pmids, search_pubmed
+from agent_from_scratch.config import Settings
+from agent_from_scratch.llm import complete
+from agent_from_scratch.pricing import cost_usd
+from agent_from_scratch.tools import SEARCH_PUBMED_SCHEMA, extract_pmids, search_pubmed
 
 log = logging.getLogger(__name__)
 

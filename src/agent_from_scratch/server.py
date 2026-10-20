@@ -16,22 +16,22 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from agent1.agent import run_agent
-from agent1.config import load_settings
-from agent1.pricing import list_models
+from agent_from_scratch.agent import run_agent
+from agent_from_scratch.config import load_settings
+from agent_from_scratch.pricing import list_models
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).with_name("static")
-ACCESS_CODE = os.environ.get("AGENT1_ACCESS_CODE", "")  # empty means no code required
+ACCESS_CODE = os.environ.get("AGENT_ACCESS_CODE", "")  # empty means no code required
 
 settings = load_settings()
 MODELS = list_models()
 ALLOWED_MODELS = {m["id"] for m in MODELS}
 
-app = FastAPI(title="agent1", docs_url=None, redoc_url=None)
+app = FastAPI(title="agent-from-scratch", docs_url=None, redoc_url=None)
 
 
 class AskRequest(BaseModel):

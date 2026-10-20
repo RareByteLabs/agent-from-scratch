@@ -1,10 +1,10 @@
 [project]
-name = "agent1"
+name = "agent-from-scratch"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [
-    { name = "Alex", email = "alexbelenj@gmail.com" }
+    { name = "1600years", email = "36979771+1600years@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-agent1 = "agent1.cli:main"
+agent = "agent_from_scratch.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.0,<0.13.0"]

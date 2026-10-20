@@ -1,4 +1,4 @@
-# agent1: an evidence assistant, built from scratch
+# agent-from-scratch: an evidence assistant, built from scratch
 
 A small, production-minded example of an AI agent. You ask a medical-evidence question; the agent searches
 [PubMed](https://pubmed.ncbi.nlm.nih.gov/) through the public NCBI API, reads the abstracts, and answers with PMID
@@ -7,7 +7,7 @@ token and cost readouts.
 
 **Step-by-step tutorial:** [`docs/tutorial.html`](docs/tutorial.html). It walks through building this project from an empty folder
 and includes a Q&A section. If GitHub Pages is enabled for this repo, read it at
-`https://alexbelenj.github.io/<repo>/tutorial.html`.
+`https://rarebytelabs.github.io/agent-from-scratch//tutorial.html`.
 
 > **Demonstration project.** Answers can be incomplete or wrong. Verify every citation against the paper. This is not medical advice,
 > and you should never enter patient-identifying information: questions are sent to a third-party API.
@@ -38,8 +38,8 @@ cp .env.example .env          # then put your real key in .env
 | Variable | Required | Purpose |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | yes | Your API key |
-| `AGENT1_MODEL` | no | Default model ID (default: `claude-haiku-4-5-20251001`) |
-| `AGENT1_ACCESS_CODE` | no | If set, the web page asks for this code before it will run a question |
+| `AGENT_MODEL` | no | Default model ID (default: `claude-haiku-4-5-20251001`) |
+| `AGENT_ACCESS_CODE` | no | If set, the web page asks for this code before it will run a question |
 
 ## Run it
 
@@ -48,7 +48,7 @@ All commands run from the project root (the folder containing `pyproject.toml`).
 **Ask a question from the command line**
 
 ```bash
-uv run agent1 "Does screening colonoscopy reduce colorectal cancer mortality?"
+uv run agent "Does screening colonoscopy reduce colorectal cancer mortality?"
 ```
 
 The log shows each step, then the answer, then token usage and estimated cost.
@@ -56,25 +56,25 @@ The log shows each step, then the answer, then token usage and estimated cost.
 **Try a different model without changing code**
 
 ```bash
-AGENT1_MODEL=claude-haiku-5-5 uv run agent1 "Do statins reduce cardiovascular events in primary prevention?"
+AGENT_MODEL=claude-haiku-5-5 uv run agent "Do statins reduce cardiovascular events in primary prevention?"
 ```
 
 **Start the web page**
 
 ```bash
-uv run uvicorn agent1.server:app --host 127.0.0.1 --port 8000
+uv run uvicorn agent_from_scratch.server:app --host 127.0.0.1 --port 8000
 ```
 
 Open <http://127.0.0.1:8000>. Pick a model, type a question, and watch the progress steps appear. The page also shows
 the model used, tokens in and out, estimated cost and time. Stop the server with `Ctrl+C`.
 
 Listening on `127.0.0.1` means only your own machine can reach it. To let someone else try it, see chapter 11 of the tutorial
-(Tailscale share or Funnel). If the server is reachable from the internet, set `AGENT1_ACCESS_CODE` first.
+(Tailscale share or Funnel). If the server is reachable from the internet, set `AGENT_ACCESS_CODE` first.
 
 **Test the PubMed tool on its own (no AI, no API key needed)**
 
 ```bash
-uv run python -c "from agent1.tools import search_pubmed; print(search_pubmed('colorectal cancer screening', 2)[:1500])"
+uv run python -c "from agent_from_scratch.tools import search_pubmed; print(search_pubmed('colorectal cancer screening', 2)[:1500])"
 ```
 
 **Check the code**
@@ -90,10 +90,10 @@ uv run pytest                 # tests (a test suite is on the roadmap)
 ```
 ├── README.md
 ├── docs/tutorial.html         the step-by-step guide
-├── pyproject.toml             dependencies, the `agent1` command, ruff config
+├── pyproject.toml             dependencies, the `agent-from-scratch` command, ruff config
 ├── uv.lock                    exact dependency versions (committed on purpose)
 ├── .env.example               names of the variables; no secrets
-└── src/agent1/
+└── src/agent_from_scratch/
     ├── config.py              settings from the environment
     ├── llm.py                 the only file that talks to the Anthropic SDK
     ├── tools.py               search_pubmed and its tool schema
@@ -107,7 +107,7 @@ uv run pytest                 # tests (a test suite is on the roadmap)
 
 ## Notes on cost
 
-Costs shown are estimates at list prices from `src/agent1/prices.toml` (last checked 2026-10-19). Prices change, so verify them on the
+Costs shown are estimates at list prices from `src/agent_from_scratch/prices.toml` (last checked 2026-10-19). Prices change, so verify them on the
 [Anthropic pricing page](https://platform.claude.com/docs/en/about-claude/pricing), and treat the Console usage page as the billing truth.
 
 ## Roadmap

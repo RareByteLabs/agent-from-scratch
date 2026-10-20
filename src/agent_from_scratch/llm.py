@@ -3,7 +3,7 @@
 import anthropic
 from anthropic.types import MessageParam, ToolParam
 
-from agent1.config import Settings
+from agent_from_scratch.config import Settings
 
 
 def complete(
