@@ -1,7 +1,14 @@
+import argparse
+import logging
+
+from agent1.agent import run_agent
 from agent1.config import load_settings
-from agent1.llm import ask
 
 
 def main() -> None:
-    settings = load_settings()
-    print(ask(settings, "In one sentence, what is an AI agent?"))
+    parser = argparse.ArgumentParser(prog="agent1", description="Evidence-lookup agent")
+    parser.add_argument("question", help="A medical evidence question, in quotes")
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    print(run_agent(load_settings(), args.question))
