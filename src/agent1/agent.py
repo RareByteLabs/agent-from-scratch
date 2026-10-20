@@ -1,6 +1,7 @@
 """The agent loop: ask the model, run the tools it requests, feed results back, repeat."""
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from anthropic.types import MessageParam, ToolParam, ToolResultBlockParam
@@ -8,7 +9,7 @@ from anthropic.types import MessageParam, ToolParam, ToolResultBlockParam
 from agent1.config import Settings
 from agent1.llm import complete
 from agent1.pricing import cost_usd
-from agent1.tools import SEARCH_PUBMED_SCHEMA, search_pubmed
+from agent1.tools import SEARCH_PUBMED_SCHEMA, extract_pmids, search_pubmed
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +57,19 @@ class AgentResult:
     stopped_early: bool = False
 
 
-def run_agent(settings: Settings, question: str) -> AgentResult:
+Event = dict[str, object]
+EventCallback = Callable[[Event], None]
+
+
+def run_agent(
+    settings: Settings, question: str, on_event: EventCallback | None = None
+) -> AgentResult:
+    """Run the loop. If on_event is given, it is called with a progress event at each stage."""
+
+    def emit(event: Event) -> None:
+        if on_event is not None:
+            on_event(event)
+
     messages: list[MessageParam] = [{"role": "user", "content": question}]
     total_in = total_out = 0
 
@@ -66,6 +79,7 @@ def run_agent(settings: Settings, question: str) -> AgentResult:
         return AgentResult(answer, settings.model, total_in, total_out, cost, steps, stopped_early)
 
     for step in range(1, MAX_STEPS + 1):
+        emit({"type": "thinking", "step": step})
         response = complete(settings, system=SYSTEM_PROMPT, messages=messages, tools=TOOLS)
         total_in += response.usage.input_tokens
         total_out += response.usage.output_tokens
@@ -83,7 +97,9 @@ def run_agent(settings: Settings, question: str) -> AgentResult:
         tool_results: list[ToolResultBlockParam] = []
         for block in response.content:
             if block.type == "tool_use":
+                emit({"type": "tool_start", "name": block.name, "input": block.input})
                 output = run_tool(block.name, block.input)
+                emit({"type": "tool_end", "name": block.name, "pmids": extract_pmids(output)})
                 tool_results.append(
                     {"type": "tool_result", "tool_use_id": block.id, "content": output}
                 )

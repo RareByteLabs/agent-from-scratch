@@ -56,12 +56,25 @@
   #code-wrap { margin-top: 14px; }
   .hidden { display: none; }
 
-  #status { margin-top: 28px; color: var(--muted); font-size: 14px; min-height: 22px; }
+  #status { margin-top: 20px; color: var(--muted); font-size: 14px; min-height: 22px; }
   #status.err { color: var(--err); }
   .dots::after { content: ""; animation: dots 1.4s steps(4, end) infinite; }
   @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
 
-  #result { margin-top: 8px; }
+  .progress { list-style: none; margin: 28px 0 0; padding: 0; font-size: 14px; color: var(--muted); }
+  .progress:empty { display: none; }
+  .progress li { position: relative; padding: 0 0 10px 24px; }
+  .progress li::before {
+    content: ""; position: absolute; left: 3px; top: 8px; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--line);
+  }
+  .progress li.done::before { background: var(--accent); }
+  .progress li.active::before { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  .progress .detail { display: block; font-size: 13px; margin-top: 2px; }
+  .progress a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+  @keyframes pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+  #result { margin-top: 12px; }
   .answer {
     background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
     padding: 24px 26px;
@@ -124,6 +137,7 @@
     </div>
   </form>
 
+  <ol id="progress" class="progress" aria-live="polite"></ol>
   <div id="status" role="status" aria-live="polite"></div>
   <div id="result"></div>
 
@@ -197,6 +211,63 @@ function showResult(r, seconds, modelLabel) {
     <p class="note">Cost is an estimate at published list prices. ${r.steps} agent step${r.steps === 1 ? "" : "s"}${r.stopped_early ? " (stopped early)" : ""}.</p>`;
 }
 
+// ---- live progress -------------------------------------------------------
+function pubmedLinks(pmids) {
+  return pmids.slice(0, 8).map((n) =>
+    `<a href="https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(n)}/" target="_blank" rel="noopener">${escapeHtml(n)}</a>`
+  ).join(", ") + (pmids.length > 8 ? ` and ${pmids.length - 8} more` : "");
+}
+
+function addStep(label) {
+  settleActive();
+  const li = document.createElement("li");
+  li.className = "active";
+  li.innerHTML = `<span class="label dots">${escapeHtml(label)}</span><span class="detail"></span>`;
+  $("progress").appendChild(li);
+  return li;
+}
+
+function settleActive() {
+  document.querySelectorAll("#progress li.active").forEach((li) => {
+    li.classList.replace("active", "done");
+    li.querySelector(".label").classList.remove("dots");
+  });
+}
+
+function addDetail(html) {
+  const li = $("progress").lastElementChild;
+  if (li) li.querySelector(".detail").innerHTML = html;
+}
+
+function handleEvent(ev) {
+  if (ev.type === "thinking") {
+    addStep(ev.step === 1 ? "Understanding your question" : "Reviewing the results");
+  } else if (ev.type === "tool_start") {
+    const query = ev.input && ev.input.query ? ` for \u201c${ev.input.query}\u201d` : "";
+    addStep(`Searching PubMed${query}`);
+  } else if (ev.type === "tool_end") {
+    const n = ev.pmids.length;
+    addDetail(n ? `Found ${n} reference${n === 1 ? "" : "s"}: ${pubmedLinks(ev.pmids)}` : "Results retrieved");
+  }
+}
+
+async function* readEvents(res) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let i;
+    while ((i = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, i).trim();
+      buffer = buffer.slice(i + 1);
+      if (line) yield JSON.parse(line);
+    }
+  }
+}
+
 async function init() {
   const cfg = await (await fetch("/api/config")).json();
   const select = $("model");
@@ -224,21 +295,34 @@ $("form").addEventListener("submit", async (e) => {
 
   $("ask").disabled = true;
   $("result").innerHTML = "";
-  showStatus("Searching PubMed and reading abstracts", { busy: true });
+  $("progress").innerHTML = "";
+  showStatus("");
   const t0 = performance.now();
   try {
     const res = await fetch("/api/ask", {
       method: "POST", headers,
       body: JSON.stringify({ question, model: select.value }),
     });
-    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
       const detail = typeof data.detail === "string" ? data.detail : "Something went wrong.";
       throw new Error(res.status === 401 ? "That access code was not accepted." : detail);
     }
-    showStatus("");
-    showResult(data, (performance.now() - t0) / 1000, modelLabel);
+    let finished = false;
+    for await (const ev of readEvents(res)) {
+      if (ev.type === "done") {
+        settleActive();
+        showResult(ev.result, (performance.now() - t0) / 1000, modelLabel);
+        finished = true;
+      } else if (ev.type === "error") {
+        throw new Error(ev.detail);
+      } else {
+        handleEvent(ev);
+      }
+    }
+    if (!finished) throw new Error("The connection ended before an answer arrived.");
   } catch (err) {
+    settleActive();
     showStatus(err.message || "Could not reach the server.", { error: true });
   } finally {
     $("ask").disabled = false;

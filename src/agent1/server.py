@@ -1,15 +1,19 @@
 """HTTP interface for the agent. A thin layer: all agent logic stays in agent.py."""
 
+import json
 import logging
 import os
+import queue
 import secrets
+import threading
+from collections.abc import Iterator
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Annotated
 
 import anthropic
 from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from agent1.agent import run_agent
@@ -55,20 +59,40 @@ def config() -> dict[str, object]:
     }
 
 
+def event_stream(req: AskRequest) -> Iterator[str]:
+    """Run the agent in a worker thread and yield its progress events as JSON lines."""
+    events: queue.Queue[dict[str, object] | None] = queue.Queue()
+
+    def worker() -> None:
+        try:
+            result = run_agent(
+                replace(settings, model=req.model), req.question, on_event=events.put
+            )
+            events.put({"type": "done", "result": asdict(result)})
+        except anthropic.APIError:
+            log.exception("Anthropic API call failed")
+            events.put({"type": "error", "detail": "The model service returned an error."})
+        except Exception:  # noqa: BLE001 - boundary: report any failure to the client
+            log.exception("Agent run failed")
+            events.put({"type": "error", "detail": "Something went wrong on the server."})
+        finally:
+            events.put(None)  # sentinel: the stream is over
+
+    threading.Thread(target=worker, daemon=True).start()
+    while (event := events.get()) is not None:
+        yield json.dumps(event) + "\n"
+
+
 @app.post("/api/ask")
 def ask(
     req: AskRequest, x_access_code: Annotated[str | None, Header()] = None
-) -> dict[str, object]:
-    # A plain `def` (not async): FastAPI runs it in a worker thread, so the
-    # blocking agent call does not freeze the server for other requests.
+) -> StreamingResponse:
+    # Checks happen before streaming starts, so failures are proper HTTP errors.
     check_access(x_access_code)
     if req.model not in ALLOWED_MODELS:  # never trust the browser's dropdown value
         raise HTTPException(status_code=422, detail="Unknown model.")
-    try:
-        result = run_agent(replace(settings, model=req.model), req.question)
-    except anthropic.APIError:
-        log.exception("Anthropic API call failed")
-        raise HTTPException(
-            status_code=502, detail="The model service returned an error. Try again shortly."
-        ) from None
-    return asdict(result)
+    return StreamingResponse(
+        event_stream(req),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

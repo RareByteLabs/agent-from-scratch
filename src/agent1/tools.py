@@ -1,11 +1,18 @@
 """Tools the agent can call. Each tool is a plain function plus a schema the model reads."""
 
+import re
+
 import httpx
 from anthropic.types import ToolParam
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 TIMEOUT = 15.0
 MAX_CHARS = 8000  # cap what we hand back to the model, so cost stays bounded
+
+
+def extract_pmids(text: str) -> list[str]:
+    """PMIDs mentioned in a PubMed result text, in order, without duplicates."""
+    return list(dict.fromkeys(re.findall(r"PMID:\s*(\d+)", text)))
 
 
 def search_pubmed(query: str, max_results: int = 5) -> str:
