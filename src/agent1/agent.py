@@ -1,6 +1,7 @@
 """The agent loop: ask the model, run the tools it requests, feed results back, repeat."""
 
 import logging
+from dataclasses import dataclass
 
 from anthropic.types import MessageParam, ToolParam, ToolResultBlockParam
 
@@ -44,9 +45,25 @@ def usage_summary(model: str, tokens_in: int, tokens_out: int) -> str:
     return f"\n\n\nModel={model} tokens in={tokens_in} out={tokens_out} cost={cost_text}\n\n\n"
 
 
-def run_agent(settings: Settings, question: str) -> str:
+@dataclass(frozen=True)
+class AgentResult:
+    answer: str
+    model: str
+    tokens_in: int
+    tokens_out: int
+    cost_usd: float | None
+    steps: int
+    stopped_early: bool = False
+
+
+def run_agent(settings: Settings, question: str) -> AgentResult:
     messages: list[MessageParam] = [{"role": "user", "content": question}]
     total_in = total_out = 0
+
+    def finish(answer: str, steps: int, stopped_early: bool = False) -> AgentResult:
+        log.info("usage: %s", usage_summary(settings.model, total_in, total_out))
+        cost = cost_usd(settings.model, total_in, total_out)
+        return AgentResult(answer, settings.model, total_in, total_out, cost, steps, stopped_early)
 
     for step in range(1, MAX_STEPS + 1):
         response = complete(settings, system=SYSTEM_PROMPT, messages=messages, tools=TOOLS)
@@ -55,28 +72,21 @@ def run_agent(settings: Settings, question: str) -> str:
         log.info("step %d: stop_reason=%s", step, response.stop_reason)
 
         if response.stop_reason != "tool_use":
-            log.info("usage: %s", usage_summary(settings.model, total_in, total_out))
-            return "".join(b.text for b in response.content if b.type == "text")
-
-        messages.append({"role": "assistant", "content": response.content})
-        results: list[ToolResultBlockParam] = []
-        for block in response.content:
-            if block.type == "tool_use":
-                log.info("tool call: %s %s", block.name, block.input)
-                results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": run_tool(block.name, block.input),
-                    }
-                )
-        messages.append({"role": "user", "content": results})
+            text = "".join(b.text for b in response.content if b.type == "text")
+            return finish(text, step)
 
         if response.usage.input_tokens > MAX_PROMPT_TOKENS:
-            # Guardrail: stop if the prompt is too big, to avoid runaway costs
             log.warning("prompt size %d is over budget, stopping", response.usage.input_tokens)
-            log.info("usage: %s", usage_summary(settings.model, total_in, total_out))
-            return "Stopped: prompt budget exceeded."
+            return finish("Stopped: prompt budget exceeded.", step, stopped_early=True)
 
-    log.info("usage: %s", usage_summary(settings.model, total_in, total_out))
-    return "Stopped: step limit reached without a final answer."
+        messages.append({"role": "assistant", "content": response.content})
+        tool_results: list[ToolResultBlockParam] = []
+        for block in response.content:
+            if block.type == "tool_use":
+                output = run_tool(block.name, block.input)
+                tool_results.append(
+                    {"type": "tool_result", "tool_use_id": block.id, "content": output}
+                )
+        messages.append({"role": "user", "content": tool_results})
+
+    return finish("Stopped: step limit reached without a final answer.", MAX_STEPS, True)

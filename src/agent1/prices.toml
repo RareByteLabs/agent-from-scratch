@@ -1,20 +1,20 @@
-# USD per million tokens (list prices, no caching or batch discounts).
+# USD per million tokens (list prices; no caching or batch discounts).
 # Source: https://platform.claude.com/docs/en/about-claude/pricing
 # Last checked: 2026-10-19
 # Not modeled: Haiku 5.5 charges more for prompts over 100K tokens.
+# Every model listed here appears in the web interface's dropdown.
 
 [claude-haiku-4-5-20251001]
+label = "Claude Haiku 4.5"
 input = 1.0
 output = 5.0
 
 [claude-haiku-5-5]
+label = "Claude Haiku 5.5"
 input = 0.10
 output = 0.50
 
-[claude-sonnet-5]
-input = 2.0
-output = 10.0
-
 [claude-sonnet-5-5]
+label = "Claude Sonnet 5.5"
 input = 2.0
 output = 10.0

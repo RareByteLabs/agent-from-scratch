@@ -11,4 +11,4 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    print(run_agent(load_settings(), args.question))
+    print(run_agent(load_settings(), args.question).answer)

@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evidence Assistant</title>
+<style>
+  :root {
+    --bg: #fafaf9; --surface: #ffffff; --text: #1c1917; --muted: #78716c;
+    --line: #e7e5e4; --accent: #0f766e; --accent-ink: #ffffff; --err: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c0a09; --surface: #171412; --text: #f5f5f4; --muted: #a8a29e;
+      --line: #292524; --accent: #2dd4bf; --accent-ink: #042f2e; --err: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 56px 20px 40px; }
+  header { margin-bottom: 32px; }
+  .eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin: 6px 0 4px; font-size: 28px; font-weight: 600; letter-spacing: -.01em; }
+  .sub { margin: 0; color: var(--muted); }
+
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  textarea, select, input[type=password] {
+    width: 100%; font: inherit; color: var(--text); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  textarea { min-height: 112px; resize: vertical; }
+  textarea:focus, select:focus, input:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .row { display: flex; gap: 12px; align-items: flex-end; margin-top: 14px; flex-wrap: wrap; }
+  .row > div { flex: 1 1 200px; }
+  button {
+    font: inherit; font-weight: 500; cursor: pointer; border: 0; border-radius: 10px;
+    padding: 12px 24px; background: var(--accent); color: var(--accent-ink);
+    transition: opacity .15s;
+  }
+  button:hover { opacity: .9; }
+  button:disabled { opacity: .5; cursor: default; }
+  .examples { margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .examples button {
+    background: none; color: var(--accent); padding: 0; border-radius: 0; font-weight: 400;
+    text-align: left; display: block; margin-top: 4px; font-size: 13px;
+  }
+  .examples button:hover { text-decoration: underline; opacity: 1; }
+  #code-wrap { margin-top: 14px; }
+  .hidden { display: none; }
+
+  #status { margin-top: 28px; color: var(--muted); font-size: 14px; min-height: 22px; }
+  #status.err { color: var(--err); }
+  .dots::after { content: ""; animation: dots 1.4s steps(4, end) infinite; }
+  @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+
+  #result { margin-top: 8px; }
+  .answer {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 24px 26px;
+  }
+  .answer p { margin: 0 0 14px; }
+  .answer p:last-child, .answer ul:last-child, .answer ol:last-child { margin-bottom: 0; }
+  .answer ul, .answer ol { margin: 0 0 14px; padding-left: 22px; }
+  .answer h3 { margin: 20px 0 8px; font-size: 16px; }
+  .answer h3:first-child { margin-top: 0; }
+  .answer a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+  .answer a:hover { border-bottom-color: var(--accent); }
+
+  .meta {
+    display: grid; grid-template-columns: 1.6fr repeat(4, 1fr); gap: 1px;
+    margin-top: 16px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 12px; overflow: hidden;
+  }
+  .meta div { background: var(--surface); padding: 12px 16px; }
+  .meta dt { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .meta dd { margin: 2px 0 0; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  @media (max-width: 600px) {
+    .meta { grid-template-columns: 1fr 1fr; }
+    .meta div:first-child, .meta div:last-child { grid-column: 1 / -1; }
+  }
+  .note { margin: 10px 2px 0; font-size: 12px; color: var(--muted); }
+
+  footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Prototype</div>
+    <h1>Evidence Assistant</h1>
+    <p class="sub">Ask a clinical question. The assistant searches PubMed and answers with cited sources.</p>
+  </header>
+
+  <form id="form">
+    <label for="question">Your question</label>
+    <textarea id="question" maxlength="1000" placeholder="e.g. Does screening colonoscopy reduce colorectal cancer mortality?" required></textarea>
+
+    <div id="code-wrap" class="hidden">
+      <label for="code">Access code</label>
+      <input id="code" type="password" autocomplete="off">
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="model">Model</label>
+        <select id="model"></select>
+      </div>
+      <button id="ask" type="submit">Ask</button>
+    </div>
+
+    <div class="examples">
+      Try:
+      <button type="button" data-q="Does screening colonoscopy reduce colorectal cancer mortality?">Does screening colonoscopy reduce colorectal cancer mortality?</button>
+      <button type="button" data-q="Do statins reduce cardiovascular events in primary prevention?">Do statins reduce cardiovascular events in primary prevention?</button>
+      <button type="button" data-q="Does polygenic risk scoring improve prediction of coronary artery disease?">Does polygenic risk scoring improve prediction of coronary artery disease?</button>
+    </div>
+  </form>
+
+  <div id="status" role="status" aria-live="polite"></div>
+  <div id="result"></div>
+
+  <footer>
+    Demonstration prototype. Answers summarise published literature retrieved from PubMed and may be
+    incomplete or wrong; verify against the cited papers. Not medical advice. Do not enter patient-identifying information.
+  </footer>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k) { try { return sessionStorage.getItem(k) || ""; } catch { return ""; } },
+  set(k, v) { try { sessionStorage.setItem(k, v); } catch { /* storage unavailable: fine */ } },
+};
+
+const escapeHtml = (s) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+// Inline formatting on text that is ALREADY escaped: bold, italics, PubMed links.
+function inline(escaped) {
+  return escaped
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+    .replace(/(PMIDs?:?\s*)((?:\d{5,9}[\s,;]*(?:and\s+)?)+)/gi, (_, prefix, nums) =>
+      prefix + nums.replace(/\d{5,9}/g,
+        (n) => `<a href="https://pubmed.ncbi.nlm.nih.gov/${n}/" target="_blank" rel="noopener">${n}</a>`));
+}
+
+// Tiny, safe markdown subset: headings, bullet and numbered lists, paragraphs.
+function render(text) {
+  const out = [];
+  let list = null;
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const raw of text.split("\n")) {
+    const line = escapeHtml(raw.trim());
+    let m;
+    if (!line) { closeList(); continue; }
+    if ((m = line.match(/^#{1,4}\s+(.*)/))) { closeList(); out.push(`<h3>${inline(m[1])}</h3>`); }
+    else if ((m = line.match(/^[-*•]\s+(.*)/))) {
+      if (list !== "ul") { closeList(); out.push("<ul>"); list = "ul"; }
+      out.push(`<li>${inline(m[1])}</li>`);
+    } else if ((m = line.match(/^\d+[.)]\s+(.*)/))) {
+      if (list !== "ol") { closeList(); out.push("<ol>"); list = "ol"; }
+      out.push(`<li>${inline(m[1])}</li>`);
+    } else { closeList(); out.push(`<p>${inline(line)}</p>`); }
+  }
+  closeList();
+  return out.join("");
+}
+
+const fmtCost = (c) => (c == null ? "n/a" : "$" + c.toFixed(c < 0.1 ? 4 : 3));
+const fmtNum = (n) => n.toLocaleString("en-US");
+
+function showStatus(msg, { error = false, busy = false } = {}) {
+  const el = $("status");
+  el.className = error ? "err" : "";
+  el.innerHTML = busy ? `${escapeHtml(msg)}<span class="dots"></span>` : escapeHtml(msg);
+}
+
+function showResult(r, seconds, modelLabel) {
+  $("result").innerHTML = `
+    <div class="answer">${render(r.answer)}</div>
+    <dl class="meta">
+      <div><dt>Model</dt><dd>${escapeHtml(modelLabel)}</dd></div>
+      <div><dt>Tokens in</dt><dd>${fmtNum(r.tokens_in)}</dd></div>
+      <div><dt>Tokens out</dt><dd>${fmtNum(r.tokens_out)}</dd></div>
+      <div><dt>Est. cost</dt><dd>${fmtCost(r.cost_usd)}</dd></div>
+      <div><dt>Time</dt><dd>${seconds.toFixed(1)} s</dd></div>
+    </dl>
+    <p class="note">Cost is an estimate at published list prices. ${r.steps} agent step${r.steps === 1 ? "" : "s"}${r.stopped_early ? " (stopped early)" : ""}.</p>`;
+}
+
+async function init() {
+  const cfg = await (await fetch("/api/config")).json();
+  const select = $("model");
+  for (const m of cfg.models) {
+    const opt = document.createElement("option");
+    opt.value = m.id; opt.textContent = m.label;
+    if (m.id === cfg.default_model) opt.selected = true;
+    select.appendChild(opt);
+  }
+  if (cfg.access_required) {
+    $("code-wrap").classList.remove("hidden");
+    $("code").value = store.get("code");
+  }
+}
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const question = $("question").value.trim();
+  if (question.length < 3) return;
+  const select = $("model");
+  const modelLabel = select.options[select.selectedIndex].textContent;
+  const headers = { "Content-Type": "application/json" };
+  const code = $("code").value;
+  if (code) { headers["X-Access-Code"] = code; store.set("code", code); }
+
+  $("ask").disabled = true;
+  $("result").innerHTML = "";
+  showStatus("Searching PubMed and reading abstracts", { busy: true });
+  const t0 = performance.now();
+  try {
+    const res = await fetch("/api/ask", {
+      method: "POST", headers,
+      body: JSON.stringify({ question, model: select.value }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const detail = typeof data.detail === "string" ? data.detail : "Something went wrong.";
+      throw new Error(res.status === 401 ? "That access code was not accepted." : detail);
+    }
+    showStatus("");
+    showResult(data, (performance.now() - t0) / 1000, modelLabel);
+  } catch (err) {
+    showStatus(err.message || "Could not reach the server.", { error: true });
+  } finally {
+    $("ask").disabled = false;
+  }
+});
+
+$("question").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("form").requestSubmit();
+});
+
+document.querySelectorAll(".examples button").forEach((b) =>
+  b.addEventListener("click", () => { $("question").value = b.dataset.q; $("question").focus(); }));
+
+init().catch(() => showStatus("Could not load settings from the server.", { error: true }));
+</script>
+</body>
+</html>
